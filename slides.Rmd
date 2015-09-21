@@ -1,0 +1,341 @@
+---
+title: "shiny + shinyjs"
+author: "Paul Viefers"
+date: "17. September 2015"
+output: 
+    ioslides_presentation:
+      highlight: espresso
+      smaller: yes
+      widescreen: yes
+      keepmd: true
+runtime: shiny
+---
+
+## The RStudio & Shiny Universe
+
+  * Shiny initially: interactive charts ([example](http://shiny.rstudio.com/gallery/kmeans-example.html)).
+  * Nowadays lets you build full-flegded UIs ([example](http://shiny.rstudio.com/gallery/bus-dashboard.html)).
+  * Interactive websites are great:
+    + those familiar with JS might miss some functionality.
+    + those not familiar might not be aware that they miss it.
+  * `shinyjs` adds some functionality commonly encountered on the web.
+
+## Basic shiny: first layer of interactivity
+
+```{r, echo=FALSE}
+inputPanel(
+  selectInput("n_breaks", label = "Number of bins:",
+              choices = c(10, 20, 35, 50), selected = 20),
+  
+  sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+              min = 0.2, max = 2, value = 1, step = 0.2)
+)
+
+renderPlot({
+  hist(faithful$eruptions, probability = TRUE, breaks = as.numeric(input$n_breaks),
+       xlab = "Duration (minutes)", main = "Geyser eruption duration")
+  
+  dens <- density(faithful$eruptions, adjust = input$bw_adjust)
+  lines(dens, col = "blue")
+})
+```
+
+## shiny + shinyjs: a second layer of interactivity
+
+```{r, echo=FALSE, message=FALSE}
+library(shinyjs)
+session_password <- "koelsch"
+shinyApp(
+    ui = shinyUI(fluidPage(
+        useShinyjs(),
+        div( 
+            id = "login_page",
+            titlePanel("Welcome"),
+            br(),
+            sidebarLayout(
+                
+                sidebarPanel(
+                    h2("Login"),
+                    p("Please enter user name and password."),
+                    hidden(
+                        div(
+                            id = "login_error",
+                            span("Invalid. Please check for typos and try again.", style = "color:red")
+                        )
+                    )
+                ),
+                
+                mainPanel(
+                    textInput("user", "User", ""),
+                    textInput("password", "Password", ""),
+                    actionButton("login", "Login", class = "btn-primary")
+                )
+            )
+        ),
+        
+        hidden(
+            div( id = "interactive_chart_m",
+                 selectInput("n_breaks", label = "Number of bins:",
+                             choices = c(10, 20, 35, 50), selected = 20),
+                 
+                 sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+                             min = 0.2, max = 2, value = 1, step = 0.2),
+                 plotOutput("Markus"),
+                 actionLink("logout_m", "Logout")
+            )
+        ),
+        
+        hidden(
+            div( id = "interactive_chart_k",
+                 # Give the page a title
+                titlePanel("Telephones by region"),
+    
+                # Generate a row with a sidebar
+                sidebarLayout(      
+                  
+                  # Define the sidebar with one input
+                  sidebarPanel(
+                    selectInput("region", "Region:", 
+                                choices=colnames(WorldPhones)),
+                    hr(),
+                    helpText("Data from AT&T (1961) The World's Telephones.")
+                  ),
+                  
+                  # Create a spot for the barplot
+                  mainPanel(
+                    plotOutput("Kyrill"),
+                    actionLink("logout_k", "Logout")
+                  )
+            )
+        )
+    )
+    )
+    ),
+    
+    server = function(input, output, session) {
+        
+        output$Markus <- renderPlot({
+            hist(faithful$eruptions, probability = TRUE, breaks = as.numeric(input$n_breaks),
+                 xlab = "Duration (minutes)", main = "Geyser eruption duration")
+            
+            dens <- density(faithful$eruptions, adjust = input$bw_adjust)
+            lines(dens, col = "blue")
+        })
+        
+        output$Kyrill <- renderPlot({
+            # Render a barplot
+            barplot(WorldPhones[,input$region]*1000,
+                    main=input$region,
+                    ylab="Number of Telephones",
+                    xlab="Year")
+        })
+        
+        # When the Login button is clicked, check whether user name is in list
+        observeEvent(input$login, {
+            
+            # User-experience stuff
+            shinyjs::disable("login")
+            
+            # Check whether user name is correct
+            # Fix me: test against a session-specific password here, not username
+            user_ok <- input$password==session_password
+            users_allowed <- input$user %in% c('Markus', 'Kyrill')
+            
+            # If credentials are valid push user into experiment
+            if(user_ok & users_allowed){
+                shinyjs::hide("login_page")
+                if(input$user == 'Markus'){
+                    shinyjs::show("interactive_chart_m")
+                } 
+                if(input$user == 'Kyrill'){
+                    shinyjs::show("interactive_chart_k")
+                }
+            } else {
+                # If credentials are invalid throw error and prompt user to try again
+                shinyjs::reset("login_page")
+                shinyjs::show("login_error")
+                shinyjs::enable("login")
+            }
+        })
+        
+        observeEvent(input$logout_m, {
+            shinyjs::reset("login_page")
+            shinyjs::enable("login")
+            shinyjs::hide("interactive_chart_m")
+            shinyjs::show("login_page")
+        })
+        
+        observeEvent(input$logout_k, {
+            shinyjs::reset("login_page")
+            shinyjs::enable("login")
+            shinyjs::hide("interactive_chart_k")
+            shinyjs::show("login_page")
+        })
+    },
+    
+    options = list(height = 300)
+)
+```
+
+## Code
+
+- The usual structure: `ui.R` with user interface and `server.R` with code for server-side handling.
+- `ui.R`: A series of `div()`s that are uncovered/covered sequentially.
+- `server.R`: a set of commands and 'listeners' that handle the R code to be executed and also the JS commands to cover and uncover.
+- See example code for experiment.
+
+## Basic JS functionality just used
+
+- `hidden(tagId)`: Create a Shiny tag that is invisible when the Shiny app starts. The tag can be made visible later
+- `show(tagId)`: show makes an element visible, hide makes an element invisible.
+- `disable`/`enable(tagId)`: Enable or disable an input element. A disabled element is not usable and not clickable.
+- `reset(tagId)`: Reset any input element back to its original value.
+
+## Make some inputs mandatory
+
+```{r, echo=FALSE, message=FALSE}
+library(shinyjs)
+session_password <- "koelsch"
+fieldsMandatory <- c('user', 'password')
+
+shinyApp(
+    ui = shinyUI(fluidPage(
+        useShinyjs(),
+        div( 
+            id = "login_page",
+            titlePanel("Welcome"),
+            br(),
+            sidebarLayout(
+                
+                sidebarPanel(
+                    h2("Login"),
+                    p("Please enter user name and password."),
+                    hidden(
+                        div(
+                            id = "login_error",
+                            span("Invalid. Please check for typos and try again.", style = "color:red")
+                        )
+                    )
+                ),
+                
+                mainPanel(
+                    textInput("user", "User", ""),
+                    textInput("password", "Password", ""),
+                    actionButton("login", "Login", class = "btn-primary")
+                )
+            )
+        ),
+        
+        hidden(
+            div( id = "interactive_chart_m",
+                 selectInput("n_breaks", label = "Number of bins:",
+                             choices = c(10, 20, 35, 50), selected = 20),
+                 
+                 sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+                             min = 0.2, max = 2, value = 1, step = 0.2),
+                 plotOutput("Markus")
+            )
+        ),
+        
+        hidden(
+            div( id = "interactive_chart_k",
+                 selectInput("n_breaks", label = "Number of bins:",
+                             choices = c(10, 20, 35, 50), selected = 20),
+                 
+                 sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+                             min = 0.2, max = 2, value = 1, step = 0.2),
+                 plotOutput("Kyrill")
+            )
+        )
+    )
+    ),
+    
+    server = function(input, output, session) {
+        
+        output$Markus <- renderPlot({
+            hist(faithful$eruptions, probability = TRUE, breaks = as.numeric(input$n_breaks),
+                 xlab = "Duration (minutes)", main = "Geyser eruption duration")
+            
+            dens <- density(faithful$eruptions, adjust = input$bw_adjust)
+            lines(dens, col = "blue")
+        })
+        
+        output$Kyrill <- renderPlot({
+            # Render a barplot
+            barplot(WorldPhones[,input$region]*1000,
+                    main=input$region,
+                    ylab="Number of Telephones",
+                    xlab="Year")
+        })
+        
+        observe({
+            # check if all mandatory fields have a value
+            mandatoryFilled <-
+            vapply(fieldsMandatory,
+                function(x) {
+                    !is.null(input[[x]]) && input[[x]] != ""
+                },
+                logical(1)
+            )
+            mandatoryFilled <- all(mandatoryFilled)
+  
+            # enable/disable the login button
+            shinyjs::toggleState(id = "login", condition = mandatoryFilled)
+        })
+        
+        # When the Login button is clicked, check whether user name is in list
+        observeEvent(input$login, {
+            
+            # User-experience stuff
+            shinyjs::disable("login")
+            
+            # Check whether user name is correct
+            # Fix me: test against a session-specific password here, not username
+            user_ok <- input$password==session_password
+            users_allowed <- input$user %in% c('Markus', 'Kyrill')
+            
+            # If credentials are valid push user into experiment
+            if(user_ok & users_allowed){
+                shinyjs::hide("login_page")
+                if(input$user == 'Markus'){
+                    shinyjs::show("interactive_chart_m")
+                } 
+                if(input$user == 'Kyrill'){
+                    shinyjs::show("interactive_chart_k")
+                }
+            } else {
+                # If credentials are invalid throw error and prompt user to try again
+                shinyjs::reset("login_page")
+                shinyjs::show("login_error")
+                shinyjs::enable("login")
+            }
+        })
+    },
+    
+    options = list(height = 300)
+)
+```
+
+## Other selected JS functions available
+
+- `toggleState`: The element will be enabled if the `condition` evalutes to `TRUE` and disabled otherwise.
+
+- `delay`: execute R code (including any shinyjs functions) after a specified amount of time.
+
+- `info`: show a message to the user (using JavaScript's alert under the hood).
+
+- `onclick`: run R code when an element is clicked. Was originally developed with the sole purpose of running a shinyjs function when an element is clicked, though any R code can be used.
+
+- `onevent`: similar to onclick, but can be used with many other events instead of click.
+
+- `logjs`: print a message to the JavaScript console (mainly used for debugging purposes).
+
+- `extendShinyjs`: allows you to write your own JavaScript functions and use shinyjs to call them as if they were regular R code. More information is available in the section "Calling your own JavaScript functions from R".
+
+
+## Wrap up
+
+- `shinyjs` adds very useful functionality. 
+- It's good to be aware of it.
+- Very handy together with reactive expressions (`observe`, `observeEvent` et al.)
+- Can code small surveys, simply end-user apps or experiments with little effort.
