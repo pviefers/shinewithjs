@@ -103,16 +103,11 @@ shinyServer(
             if(values$round > n_guesses){
                 isolate(values$payroll <- payoffRound(as.numeric(input$user)))
                 output$round <- renderText({
-#                     paste0("The computer selected your guess number ", values$payroll, 
-#                            ". Because you guessed ",ifelse(values$df[values$payroll, 3]==true_state[values$payroll], "correctly ", "incorrectly "),
-#                            "we will add ", ifelse(values$df[values$payroll, 3]==true_state[values$payroll], prize, 0),
-#                            " Euro to your show-up fee. Your total payoff will therefore equals ",
-#                            ifelse(values$df[values$payroll, 3]==true_state[values$payroll], prize, 0) + show_up, " Euro.")  
                     paste0("The computer selected your guess number ", values$payroll, 
-                    ". Because you guessed ",ifelse(1, "correctly ", "incorrectly "),
-                    "we will add ", ifelse(1, prize, 0),
-                    " Euro to your show-up fee. Your total payoff will therefore equals ",
-                    ifelse(1, prize, 0) + show_up, " Euro.")
+                           ". Because you guessed ",ifelse(values$df[values$payroll, 3]==true_state[values$payroll], "correctly ", "incorrectly "),
+                           "we will add ", ifelse(values$df[values$payroll, 3]==true_state[values$payroll], prize, 0),
+                           " Euro to your show-up fee. Your total payoff will therefore equals ",
+                           ifelse(values$df[values$payroll, 3]==true_state[values$payroll], prize, 0) + show_up, " Euro.")
                 })
                 isolate(values$df[, 5] <- ifelse(values$df[values$payroll, 3]==true_state[values$payroll], prize, 0) + show_up)
                 saveData(values$df)
